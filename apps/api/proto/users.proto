@@ -1,0 +1,28 @@
+syntax = "proto3";
+
+package users.v1;
+
+// Same data as GET /users/departments, over gRPC.
+service UserService {
+  // dummyjson users grouped by company.department.
+  rpc GetDepartmentSummaries(GetDepartmentSummariesRequest)
+      returns (GetDepartmentSummariesResponse);
+}
+
+message GetDepartmentSummariesRequest {}
+
+message GetDepartmentSummariesResponse {
+  // department -> summary
+  map<string, DepartmentSummary> departments = 1;
+}
+
+message DepartmentSummary {
+  uint32 male = 1;
+  uint32 female = 2;
+  // "min-max", e.g. "28-50"
+  string age_range = 3;
+  // hair color -> number of users
+  map<string, uint32> hair = 4;
+  // firstName + lastName -> postal code
+  map<string, string> address_user = 5;
+}

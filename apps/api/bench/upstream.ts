@@ -1,9 +1,8 @@
 import assert from "node:assert/strict";
 
 import { buildApp } from "../src/http/build-app.js";
-import { cacheAsync } from "../src/lib/cache-async.js";
-import { fetchUsers, USERS_URL } from "../src/users/dummyjson.js";
-import { summarizeByDepartment } from "../src/users/transform.js";
+import { createDepartmentSummariesSource } from "../src/users/department-summaries.js";
+import { USERS_URL } from "../src/users/dummyjson.js";
 import type { DepartmentSummaries } from "../src/users/types.js";
 import { printEnvironment } from "./report.js";
 
@@ -66,10 +65,7 @@ const countingFetch: typeof fetch = (input, init) => {
   return fetch(input, init);
 };
 const app = buildApp({
-  getDepartmentSummaries: cacheAsync(
-    async () => summarizeByDepartment(await fetchUsers(countingFetch)),
-    60_000,
-  ),
+  getDepartmentSummaries: createDepartmentSummariesSource(countingFetch),
 });
 const url = `${await app.listen({ port: 0, host: "127.0.0.1" })}/users/departments`;
 

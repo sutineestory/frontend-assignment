@@ -5,19 +5,24 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
+    "dev:grpc": "tsx watch src/grpc/main.ts",
+    "grpc:call": "tsx src/grpc/cli.ts",
     "build": "tsc -p tsconfig.build.json",
     "start": "node dist/index.js",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "test": "vitest run",
     "test:watch": "vitest",
-    "bench": "pnpm bench:transform && pnpm bench:serialize && pnpm bench:http && pnpm bench:upstream",
+    "bench": "pnpm bench:transform && pnpm bench:serialize && pnpm bench:http && pnpm bench:grpc && pnpm bench:upstream",
     "bench:transform": "tsx bench/transform.ts",
     "bench:serialize": "tsx bench/serialize.ts",
     "bench:http": "tsx bench/http.ts",
+    "bench:grpc": "tsx bench/grpc.ts",
     "bench:upstream": "tsx bench/upstream.ts"
   },
   "dependencies": {
+    "@grpc/grpc-js": "^1.14.7",
+    "@grpc/proto-loader": "^0.8.1",
     "fastify": "^5.12.8"
   },
   "devDependencies": {
