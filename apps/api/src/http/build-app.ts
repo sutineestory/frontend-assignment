@@ -1,4 +1,7 @@
-import Fastify, { type FastifyServerOptions } from "fastify";
+import Fastify, {
+  type FastifyInstance,
+  type FastifyServerOptions,
+} from "fastify";
 
 import { memoizeLast } from "../lib/memoize-last.js";
 import { UpstreamError } from "../users/dummyjson.js";
@@ -10,12 +13,24 @@ export type AppDependencies = {
 
 const JSON_CONTENT_TYPE = "application/json; charset=utf-8";
 
+/** A Fastify app with the routes registered, for tests and benchmarks. */
 export function buildApp(
-  { getDepartmentSummaries }: AppDependencies,
+  deps: AppDependencies,
   options: FastifyServerOptions = {},
 ) {
   const app = Fastify(options);
+  registerRoutes(app, deps);
+  return app;
+}
 
+/**
+ * Adds the routes and error handling to an app. The entrypoint creates the
+ * app itself, because Vercel only detects a Fastify entrypoint that does.
+ */
+export function registerRoutes(
+  app: FastifyInstance,
+  { getDepartmentSummaries }: AppDependencies,
+): void {
   // Unexpected errors are logged, but their message is not sent because it can
   // reveal internals. Client errors and UpstreamError's 502 pass through.
   // (`app.errorHandler` returns the current handler, so read it before replacing it.)
@@ -48,8 +63,6 @@ export function buildApp(
     const body = encodeSummaries(await getDepartmentSummaries());
     return reply.type(JSON_CONTENT_TYPE).send(body);
   });
-
-  return app;
 }
 
 function isUnexpected(error: unknown): boolean {
