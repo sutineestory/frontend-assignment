@@ -7,3 +7,10 @@ allowBuilds:
   protobufjs: false
   sharp: false
   unrs-resolver: false
+
+# Vercel's TypeScript check for the API follows symlinks without resolving
+# them, so from apps/api/node_modules/@types/node it can't reach the
+# undici-types that @types/node imports, and `Response` ends up empty.
+# Hoisting it to the root node_modules makes it reachable from there too.
+publicHoistPattern:
+  - undici-types
