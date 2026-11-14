@@ -12,9 +12,9 @@ registerRoutes(app, {
 
 const port = Number(process.env.PORT ?? 3000);
 
-try {
-  await app.listen({ port });
-} catch (error) {
+// Not awaited, as in Vercel's Fastify docs: Vercel captures listen() while
+// the module loads, and awaiting it there stalls the function's startup.
+app.listen({ port }).catch((error: unknown) => {
   app.log.error(error);
   process.exit(1);
-}
+});
