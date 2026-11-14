@@ -35,10 +35,17 @@ export function BoardStoreProvider({
   return <BoardStoreContext value={store}>{children}</BoardStoreContext>;
 }
 
-export function useBoardStore<T>(selector: (state: BoardStore) => T): T {
+/** The store itself, for subscribing to changes outside of rendering. */
+export function useBoardStoreApi(): BoardStoreApi {
   const store = useContext(BoardStoreContext);
   if (!store) {
-    throw new Error("useBoardStore must be used inside <BoardStoreProvider>");
+    throw new Error(
+      "Board store hooks must be used inside <BoardStoreProvider>",
+    );
   }
-  return useStore(store, selector);
+  return store;
+}
+
+export function useBoardStore<T>(selector: (state: BoardStore) => T): T {
+  return useStore(useBoardStoreApi(), selector);
 }

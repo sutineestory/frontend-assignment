@@ -24,7 +24,7 @@ describe("<Board />", () => {
     expect(buttonNames("Vegetable")).toEqual([]);
   });
 
-  it("works with the keyboard", async () => {
+  it("works with the keyboard, keeping focus in the list after each move", async () => {
     const user = userEvent.setup();
     render(<Board />);
 
@@ -33,6 +33,25 @@ describe("<Board />", () => {
 
     await user.keyboard("{Enter}");
     expect(buttonNames("Fruit")).toEqual(["Apple"]);
+    expect(buttonIn("Items", "Broccoli")).toHaveFocus();
+
+    await user.keyboard("{Enter}");
+    expect(buttonNames("Vegetable")).toEqual(["Broccoli"]);
+    expect(buttonIn("Items", "Mushroom")).toHaveFocus();
+  });
+
+  it("moves focus to the next column item, then to the empty column", async () => {
+    const user = userEvent.setup();
+    render(<Board />);
+    await user.click(buttonIn("Items", "Apple"));
+    await user.click(buttonIn("Items", "Banana"));
+
+    act(() => buttonIn("Fruit", "Apple").focus());
+    await user.keyboard("{Enter}");
+    expect(buttonIn("Fruit", "Banana")).toHaveFocus();
+
+    await user.keyboard("{Enter}");
+    expect(region("Fruit")).toHaveFocus();
   });
 
   // Testing Library's async helpers only auto-advance Jest's fake timers, so
@@ -74,6 +93,46 @@ describe("<Board />", () => {
       expect(vi.getTimerCount()).toBe(0);
     });
 
+    it("keeps focus in the column when the focused item times out", () => {
+      render(<Board />);
+      fireEvent.click(buttonIn("Items", "Apple"));
+      act(() => vi.advanceTimersByTime(1000));
+      fireEvent.click(buttonIn("Items", "Banana"));
+
+      act(() => buttonIn("Fruit", "Apple").focus());
+      act(() => vi.advanceTimersByTime(RETURN_DELAY_MS - 1000));
+      expect(buttonIn("Fruit", "Banana")).toHaveFocus();
+
+      act(() => vi.advanceTimersByTime(1000));
+      expect(region("Fruit")).toHaveFocus();
+    });
+
+    it("announces every move to screen readers", () => {
+      render(<Board />);
+
+      fireEvent.click(buttonIn("Items", "Apple"));
+      expect(screen.getByRole("status")).toHaveTextContent(
+        "Apple moved to Fruit. It comes back in 5 seconds.",
+      );
+
+      act(() => vi.advanceTimersByTime(RETURN_DELAY_MS));
+      expect(screen.getByRole("status")).toHaveTextContent(
+        "Apple is back in the list.",
+      );
+    });
+
+    it("shows a countdown bar as long as the timer on column items only", () => {
+      render(<Board />);
+      fireEvent.click(buttonIn("Items", "Apple"));
+
+      const bar = buttonIn("Fruit", "Apple").querySelector("span");
+      expect(bar).toHaveAttribute("aria-hidden", "true");
+      expect(bar?.style.getPropertyValue("--countdown-duration")).toBe(
+        `${RETURN_DELAY_MS}ms`,
+      );
+      expect(buttonIn("Items", "Banana").querySelector("span")).toBeNull();
+    });
+
     // With cacheComponents, Next.js hides a page with <Activity> when you
     // navigate away. Its Effects clean up but its state stays.
     it("still returns items that time out while the board is hidden", () => {
@@ -98,6 +157,24 @@ describe("<Board />", () => {
 
       expect(buttonNames("Fruit")).toEqual([]);
       expect(buttonNames("Items").at(-1)).toBe("Apple");
+    });
+
+    it("resumes the countdown bar from the time already passed when shown again", () => {
+      const board = (mode: "visible" | "hidden") => (
+        <Activity mode={mode}>
+          <Board />
+        </Activity>
+      );
+      const { rerender } = render(board("visible"));
+      fireEvent.click(buttonIn("Items", "Apple"));
+      act(() => vi.advanceTimersByTime(2000));
+
+      rerender(board("hidden"));
+      act(() => vi.advanceTimersByTime(1000));
+      rerender(board("visible"));
+
+      const bar = buttonIn("Fruit", "Apple").querySelector("span");
+      expect(bar?.style.getPropertyValue("--countdown-delay")).toBe("-3000ms");
     });
   });
 });

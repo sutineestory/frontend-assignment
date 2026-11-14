@@ -1,4 +1,12 @@
+import type { Metadata } from "next";
+
 import { Board } from "@/features/board/components/board";
+
+export const metadata: Metadata = {
+  title: "Auto Delete Todo List",
+  description:
+    "Click an item to sort it into its column; it returns after 5 seconds.",
+};
 
 export default function Home() {
   return (

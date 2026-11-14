@@ -1,5 +1,8 @@
 import type { Metadata } from "next";
 import { Geist } from "next/font/google";
+
+import { Sidebar } from "@/components/sidebar";
+
 import "./globals.css";
 
 const geistSans = Geist({
@@ -8,16 +11,22 @@ const geistSans = Geist({
 });
 
 export const metadata: Metadata = {
-  title: "Auto Delete Todo List",
+  title: {
+    default: "Frontend Assignment",
+    template: "%s | Frontend Assignment",
+  },
   description:
-    "Click an item to sort it into its column; it returns after 5 seconds.",
+    "7 Solutions frontend assignment: an auto delete todo list and users grouped by department.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="en" className={`${geistSans.variable} h-full antialiased`}>
       <body className="min-h-full bg-white font-sans text-gray-900">
-        {children}
+        <div className="flex min-h-screen flex-col md:flex-row">
+          <Sidebar />
+          <div className="min-w-0 flex-1">{children}</div>
+        </div>
       </body>
     </html>
   );

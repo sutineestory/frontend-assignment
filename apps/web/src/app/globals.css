@@ -1,5 +1,19 @@
 @import "tailwindcss";
 
+/* `inline` writes these values into the utilities themselves, so the
+   --countdown-* variables resolve on the bar that sets them (see
+   countdown-bar.tsx) instead of on :root. */
 @theme inline {
   --font-sans: var(--font-geist-sans);
+  --animate-countdown: countdown var(--countdown-duration) linear
+    var(--countdown-delay, 0ms) forwards;
+
+  @keyframes countdown {
+    from {
+      transform: scaleX(1);
+    }
+    to {
+      transform: scaleX(0);
+    }
+  }
 }

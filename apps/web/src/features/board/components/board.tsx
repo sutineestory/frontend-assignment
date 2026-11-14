@@ -2,6 +2,7 @@ import { INITIAL_ITEMS } from "../data";
 import { BoardStoreProvider } from "../store-provider";
 import { ITEM_TYPES } from "../types";
 import { MainList } from "./main-list";
+import { MoveAnnouncer } from "./move-announcer";
 import { TypeColumn } from "./type-column";
 
 export function Board() {
@@ -13,6 +14,7 @@ export function Board() {
           <TypeColumn key={type} type={type} />
         ))}
       </div>
+      <MoveAnnouncer />
     </BoardStoreProvider>
   );
 }

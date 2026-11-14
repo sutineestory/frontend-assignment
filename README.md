@@ -24,7 +24,7 @@ pnpm --filter api grpc:call  # call the gRPC server and print the result
 
 | Command                        | What it does                                                         |
 | ------------------------------ | -------------------------------------------------------------------- |
-| `pnpm test`                    | Vitest in both apps (46 tests)                                       |
+| `pnpm test`                    | Vitest in both apps (55 tests)                                       |
 | `pnpm lint` / `pnpm typecheck` | ESLint / TypeScript in both apps                                     |
 | `pnpm build`                   | Production build of both apps                                        |
 | `pnpm format`                  | Prettier on the whole repo                                           |
@@ -32,7 +32,9 @@ pnpm --filter api grpc:call  # call the gRPC server and print the result
 
 ## Part 1: Auto Delete Todo List
 
-Click an item in the list and it moves to the bottom of its Fruit or Vegetable column. Five seconds later it goes back to the bottom of the list. Click an item in a column and it goes back right away.
+Click an item in the list and it moves to the bottom of its Fruit or Vegetable column. Five seconds later it goes back to the bottom of the list. Click an item in a column and it goes back right away. A thin bar under each column item shows the time left.
+
+The web app has a sidebar for switching between the two assignments (a row of tabs on phones, so the board keeps the full width). The Assignment 2 page is a placeholder for now.
 
 ### How it works
 
@@ -49,17 +51,19 @@ Code: [`apps/web/src/features/board/`](apps/web/src/features/board)
 
 - **Transitions do nothing when they don't apply.** `moveToColumn` on an item that isn't in the list returns the same state object. So does `moveToList` on an item that isn't in a column. That makes a manual click and a timer safe to race: whichever comes second does nothing.
 - **One timer per item, outside React state.** Timers live in a `Map` inside the store, because they are never rendered. Sending an item back by hand cancels its timer, so it can't move twice. Items that time out return in the order they were moved.
-- **Timers belong to the store, not to a component's Effects.** They start in the click handler, so React Strict Mode's double-run Effects can't create duplicates. They are also not cleared in an Effect cleanup: Next.js 16 keeps visited pages alive in `<Activity>`, which runs cleanups but keeps state, so clearing timers there would leave items stuck in a column. A test covers this.
+- **Timers belong to the store, not to a component's Effects.** They start in the click handler, so React Strict Mode's double-run Effects can't create duplicates. They are also not cleared in an Effect cleanup: Next.js 16 keeps visited pages alive in `<Activity>`, which runs cleanups but keeps state. Clearing timers there would leave items stuck in a column when you switch to Assignment 2 and back. A test covers this.
 - **One store per mount, not a module-level singleton.** On the server a singleton would be shared between requests. This is the pattern the Zustand docs recommend for Next.js.
 - **The page is a Server Component.** The first HTML already contains the whole list; only the board's interactive parts are client components. Each component subscribes only to the slice of state it renders.
-- **Accessible basics.** Items are real `<button>`s, each column is a `<section>` with a heading, focus outlines are visible, and everything works with the keyboard. Focus handling after a move could be better (see [Known limitations](#known-limitations)).
+- **Keyboard and screen reader friendly.** Items are real `<button>`s and each column is a `<section>` with a heading. When the focused item moves away (pressed, or its timer ran out), focus goes to the item that took its place instead of falling back to the top of the page, so you can press Enter repeatedly to move items one after another. A visually hidden status message announces every move, including returns nobody clicked.
+- **The countdown bar is CSS only.** Its duration comes from the same `RETURN_DELAY_MS` constant as the timer, so they can't drift apart, and it adds no state or re-renders. A hidden page's CSS animations restart when it is shown again, so the bar resumes from the time already passed. It is hidden when `prefers-reduced-motion` is on.
 - **Layout.** Three columns at every screen width, so on a phone the item you just moved stays in view. Columns keep a minimum height, so the page doesn't jump as items move.
 
-### Tests (21)
+### Tests (30)
 
 - **Transitions:** moving in both directions, append order, and the do-nothing cases.
 - **Store, with fake timers:** an item returns at 5000 ms but not at 4999 ms; a manual return cancels the timer; several timers run independently.
-- **UI, with React Testing Library:** clicking, auto-return, early return, the keyboard, and items still returning while the board is hidden in `<Activity>`.
+- **UI, with React Testing Library:** clicking, auto-return, early return, where focus goes after each kind of move, the announcements, the countdown bar's duration and how it resumes, and items still returning while the board is hidden in `<Activity>`.
+- **Sidebar:** links to both assignments and marks the current one with `aria-current`.
 
 ## Part 2: Users grouped by department
 
@@ -175,12 +179,12 @@ The assignment asks for one solution and invites a discussion of others. These a
 
 ### Part 1
 
-| Approach                               | Trade-off                                                                                                                                                                                    |
-| -------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `useReducer` + a custom hook           | No dependency. It can reuse the same pure transitions, with timers in a `useRef(new Map())`. Zustand keeps the timers out of components and lets each component subscribe to only its slice. |
-| Deadline timestamps + one ticker       | Store `expiresAt` per item and check them with one `setInterval`. Makes a live countdown easy and copes better with background-tab timer throttling, but re-renders on every tick.           |
-| Redux Toolkit + listener middleware    | Timers become side effects in middleware. Good structure for a large app, heavy for this one.                                                                                                |
-| CSS `animationend` triggers the return | Very little JavaScript, but timing then depends on rendering. Can misfire when the tab is hidden or when `prefers-reduced-motion` turns animations off.                                      |
+| Approach                               | Trade-off                                                                                                                                                                                          |
+| -------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `useReducer` + a custom hook           | No dependency. It can reuse the same pure transitions, with timers in a `useRef(new Map())`. Zustand keeps the timers out of components and lets each component subscribe to only its slice.       |
+| Deadline timestamps + one ticker       | Store `expiresAt` per item and check them with one `setInterval`. Makes a numeric countdown ("3 s left") easy and copes better with background-tab timer throttling, but re-renders on every tick. |
+| Redux Toolkit + listener middleware    | Timers become side effects in middleware. Good structure for a large app, heavy for this one.                                                                                                      |
+| CSS `animationend` triggers the return | Very little JavaScript, but timing then depends on rendering. Can misfire when the tab is hidden or when `prefers-reduced-motion` turns animations off.                                            |
 
 ### Part 2
 
@@ -196,7 +200,6 @@ The assignment asks for one solution and invites a discussion of others. These a
 
 ## Known limitations
 
-- **Focus after a move.** Moving an item re-mounts its button in another column, so keyboard focus goes back to the page, and screen readers get no announcement. Next steps: move focus to the next item in the list, and announce moves in an `aria-live` region.
 - **Double-click moves two items.** The second click of a double-click lands on the item that slid up into place. Ignoring clicks with `event.detail > 1` would stop that, but it would also ignore a quick series of single clicks on the top item, so I left the behavior as it is.
 - **The cache is per instance.** On Vercel each function instance has its own in-memory cache, and a new instance starts cold. See the shared cache and CDN options above.
 
