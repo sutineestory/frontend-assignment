@@ -56,4 +56,18 @@ describe("fetchUsers", () => {
 
     await expect(fetchUsers(fetchFn)).rejects.toBeInstanceOf(UpstreamError);
   });
+
+  it("wraps a user with missing fields in an UpstreamError", async () => {
+    const withoutCompany = { ...USERS[0], company: undefined };
+    const fetchFn = vi.fn(async () =>
+      jsonResponse({ users: [USERS[1], withoutCompany] }),
+    );
+
+    const error = await fetchUsers(fetchFn).catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(UpstreamError);
+    expect(error).toMatchObject({
+      cause: { message: "User at index 1 is missing fields" },
+    });
+  });
 });

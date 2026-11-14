@@ -2,7 +2,8 @@
 export type User = {
   firstName: string;
   lastName: string;
-  gender: "male" | "female";
+  /** dummyjson uses "male" and "female"; other values are counted as neither. */
+  gender: string;
   age: number;
   hair: { color: string };
   address: { postalCode: string };

@@ -81,13 +81,18 @@ describe("HTTP API", () => {
     });
   });
 
-  it("GET /users/departments responds 500 on unexpected errors", async () => {
+  it("GET /users/departments responds 500 without leaking the error message", async () => {
     const response = await start({
       getDepartmentSummaries: async () => {
-        throw new Error("bug");
+        throw new Error("secret bug detail");
       },
     }).inject({ method: "GET", url: "/users/departments" });
 
     expect(response.statusCode).toBe(500);
+    expect(response.json()).toEqual({
+      statusCode: 500,
+      error: "Internal Server Error",
+      message: "Internal server error",
+    });
   });
 });
