@@ -2,10 +2,10 @@
 
 My solutions to the [7 Solutions frontend assignment](docs/README.md).
 
-| Part                           | Code                   | Live               | Stack                                                     |
-| ------------------------------ | ---------------------- | ------------------ | --------------------------------------------------------- |
-| 1. Auto Delete Todo List       | [`apps/web`](apps/web) | _link coming soon_ | Next.js 16, React 19, TypeScript, Tailwind CSS 4, Zustand |
-| 2. Users grouped by department | [`apps/api`](apps/api) | _link coming soon_ | Node.js 24, Fastify 5, TypeScript (ESM), gRPC             |
+| Part                           | Code                   | Live                                                                                                                                                                                    | Stack                                                     |
+| ------------------------------ | ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| 1. Auto Delete Todo List       | [`apps/web`](apps/web) | [frontend-assignment-web.vercel.app](https://frontend-assignment-web.vercel.app)                                                                                                        | Next.js 16, React 19, TypeScript, Tailwind CSS 4, Zustand |
+| 2. Users grouped by department | [`apps/api`](apps/api) | API: [`/users/departments`](https://frontend-assignment-api-zeta.vercel.app/users/departments)<br>Dashboard: [`/assignment-2`](https://frontend-assignment-web.vercel.app/assignment-2) | Node.js 24, Fastify 5, TypeScript (ESM), gRPC             |
 
 Every push runs format check, lint, typecheck, tests and build in [CI](.github/workflows/ci.yml).
 
@@ -195,6 +195,23 @@ The sentence under each chart title is computed from the data, so it stays true 
 - **Configuration.** The dashboard reads the API from `API_URL` (default `http://localhost:4000`, see [`apps/web/.env.example`](apps/web/.env.example)). On Vercel, set it to the deployed API's URL.
 
 **Tests (23):** the stats and insight sentences (including names like `VictoriaMcDonald`), the API client's error handling, selection across charts, sorting, search, keyboard movement, the table view, and the error card.
+
+## Deployment
+
+Two Vercel projects from this repo, both on Node.js 24.x with `ENABLE_EXPERIMENTAL_COREPACK=1` (so Vercel uses the pnpm version in `packageManager`):
+
+| Project | Root Directory | Preset                | Extra settings                       |
+| ------- | -------------- | --------------------- | ------------------------------------ |
+| API     | `apps/api`     | Fastify (zero config) | none                                 |
+| Web     | `apps/web`     | Next.js               | `API_URL` = the API's production URL |
+
+Every push to `main` deploys both. gRPC is not deployed (see Part 2).
+
+Three things the API needed for Vercel, each found from its build or runtime logs:
+
+- **The entrypoint creates the Fastify app.** Vercel only detects a Fastify entrypoint (`src/index.ts`) that imports `fastify` and creates the instance itself, so it does that and calls `registerRoutes()`. Tests and benchmarks use `buildApp()`, a thin wrapper around the same function.
+- **`listen()` is not awaited.** Vercel captures `listen()` while the module loads; a top-level `await` on it kept the module from finishing, and every request hung until it failed with `INTERNAL_FUNCTION_INVOCATION_FAILED`.
+- **`undici-types` is hoisted** (`pnpm-workspace.yaml`). Vercel's TypeScript check reads pnpm's symlinked `node_modules` without resolving real paths, so it couldn't reach the `undici-types` that `@types/node` imports, and `Response` came out empty. `tsc` passed; reproducing Vercel's check locally pinned it down.
 
 ## Other approaches (for the interview)
 
