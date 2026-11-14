@@ -9,6 +9,21 @@ My solutions to the [7 Solutions frontend assignment](docs/README.md).
 
 Every push runs format check, lint, typecheck, tests and build in [CI](.github/workflows/ci.yml).
 
+## Demo
+
+- **Part 1, Auto Delete Todo List:** https://frontend-assignment-web.vercel.app
+- **Part 2, dashboard:** https://frontend-assignment-web.vercel.app/assignment-2
+- **Part 2, API:** https://frontend-assignment-api-zeta.vercel.app/users/departments
+  (health check: https://frontend-assignment-api-zeta.vercel.app/health)
+
+## Highlights
+
+- **Part 1:** every item has its own 5-second timer in a Zustand store, and a manual click and a timer can never move the same item twice. Works with the keyboard and screen readers, with a CSS-only countdown bar.
+- **Part 2 API:** one request for all 208 users, a single-pass transform, and a 60 s cache that shares in-flight requests (100 concurrent requests → 1 call to dummyjson). The JSON is encoded once per cache fill: 114k requests/s, against 20k for my first version.
+- **gRPC:** the same data over `@grpc/grpc-js` (runs locally), with the protobuf also encoded once (1.5x the calls/s).
+- **Dashboard:** the Part 2 data as four charts with insights computed from the data, selection shared across charts, and a table view, in about 6 KB of JavaScript.
+- **Quality:** 78 tests, benchmarks you can rerun (`pnpm bench`), CI on every push, both apps deployed on Vercel.
+
 ## Quick start
 
 Requires Node.js 24 and pnpm (`corepack enable pnpm`).
