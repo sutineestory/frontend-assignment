@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { buildApp, type AppDependencies } from "../src/http/build-app.js";
 import { UpstreamError } from "../src/users/dummyjson.js";
@@ -43,8 +43,28 @@ describe("HTTP API", () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(response.headers["content-type"]).toMatch(/application\/json/);
+    expect(response.headers["content-type"]).toBe(
+      "application/json; charset=utf-8",
+    );
     expect(response.json()).toEqual(summarizeByDepartment(USERS));
+  });
+
+  it("GET /users/departments serves new data after the cache refills", async () => {
+    const [first, second] = [USERS.slice(0, 1), USERS.slice(1)].map(
+      summarizeByDepartment,
+    );
+    const getDepartmentSummaries = vi
+      .fn<AppDependencies["getDepartmentSummaries"]>()
+      .mockResolvedValueOnce(first!)
+      .mockResolvedValueOnce(first!)
+      .mockResolvedValueOnce(second!);
+    const server = start({ getDepartmentSummaries });
+    const get = () =>
+      server.inject({ method: "GET", url: "/users/departments" });
+
+    expect((await get()).json()).toEqual(first);
+    expect((await get()).json()).toEqual(first);
+    expect((await get()).json()).toEqual(second);
   });
 
   it("GET /users/departments responds 502 when dummyjson fails", async () => {

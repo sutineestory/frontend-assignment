@@ -11,7 +11,7 @@ const USER_FIELDS = [
 ] as const;
 
 // `limit=0` returns all users; without it dummyjson only returns the first 30.
-const USERS_URL = `https://dummyjson.com/users?limit=0&select=${USER_FIELDS.join(",")}`;
+export const USERS_URL = `https://dummyjson.com/users?limit=0&select=${USER_FIELDS.join(",")}`;
 
 const REQUEST_TIMEOUT_MS = 5000;
 

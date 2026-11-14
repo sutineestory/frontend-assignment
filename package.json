@@ -12,6 +12,7 @@
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
     "build": "pnpm -r build",
+    "bench": "pnpm --filter api bench",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },
