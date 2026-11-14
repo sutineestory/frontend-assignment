@@ -21,7 +21,7 @@ describe("createBoardStore", () => {
   });
 
   afterEach(() => {
-    store.getState().dispose();
+    vi.clearAllTimers();
     vi.useRealTimers();
   });
 
@@ -113,15 +113,6 @@ describe("createBoardStore", () => {
     state().moveToColumn("Unknown");
 
     expect(state()).toBe(before);
-    expect(vi.getTimerCount()).toBe(0);
-  });
-
-  it("clears pending timers on dispose", () => {
-    state().moveToColumn("Apple");
-    state().moveToColumn("Broccoli");
-
-    state().dispose();
-
     expect(vi.getTimerCount()).toBe(0);
   });
 });

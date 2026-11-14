@@ -1,5 +1,6 @@
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { Activity } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { INITIAL_ITEMS } from "../data";
@@ -73,14 +74,30 @@ describe("<Board />", () => {
       expect(vi.getTimerCount()).toBe(0);
     });
 
-    it("cancels pending timers when unmounted", () => {
-      const { unmount } = render(<Board />);
-
+    // With cacheComponents, Next.js hides a page with <Activity> when you
+    // navigate away. Its Effects clean up but its state stays.
+    it("still returns items that time out while the board is hidden", () => {
+      const { rerender } = render(
+        <Activity mode="visible">
+          <Board />
+        </Activity>,
+      );
       fireEvent.click(buttonIn("Items", "Apple"));
-      expect(vi.getTimerCount()).toBe(1);
 
-      unmount();
-      expect(vi.getTimerCount()).toBe(0);
+      rerender(
+        <Activity mode="hidden">
+          <Board />
+        </Activity>,
+      );
+      act(() => vi.advanceTimersByTime(RETURN_DELAY_MS));
+      rerender(
+        <Activity mode="visible">
+          <Board />
+        </Activity>,
+      );
+
+      expect(buttonNames("Fruit")).toEqual([]);
+      expect(buttonNames("Items").at(-1)).toBe("Apple");
     });
   });
 });

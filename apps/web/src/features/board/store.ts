@@ -10,8 +10,6 @@ export type BoardActions = {
   moveToColumn: (name: string) => void;
   /** Move a column item back to the bottom of the list right away. */
   moveToList: (name: string) => void;
-  /** Cancel every pending return timer. */
-  dispose: () => void;
 };
 
 export type BoardStore = BoardState & BoardActions;
@@ -43,11 +41,6 @@ export function createBoardStore(items: readonly Item[]) {
     moveToList: (name) => {
       cancelTimer(name);
       set((state) => board.moveToList(state, name));
-    },
-
-    dispose: () => {
-      timers.forEach((timer) => clearTimeout(timer));
-      timers.clear();
     },
   }));
 }
