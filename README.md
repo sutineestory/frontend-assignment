@@ -16,15 +16,16 @@ Requires Node.js 24 and pnpm (`corepack enable pnpm`).
 ```bash
 pnpm install
 
-pnpm dev:web                 # Part 1: http://localhost:3000
-PORT=4000 pnpm dev:api       # Part 2: http://localhost:4000/users/departments
+PORT=4000 pnpm dev:api       # Part 2 API: http://localhost:4000/users/departments
+pnpm dev:web                 # Web app: http://localhost:3000 (Part 1)
+                             #   and /assignment-2 (dashboard, reads the API above)
 pnpm dev:grpc                # Part 2 over gRPC: localhost:50051
 pnpm --filter api grpc:call  # call the gRPC server and print the result
 ```
 
 | Command                        | What it does                                                         |
 | ------------------------------ | -------------------------------------------------------------------- |
-| `pnpm test`                    | Vitest in both apps (55 tests)                                       |
+| `pnpm test`                    | Vitest in both apps (78 tests)                                       |
 | `pnpm lint` / `pnpm typecheck` | ESLint / TypeScript in both apps                                     |
 | `pnpm build`                   | Production build of both apps                                        |
 | `pnpm format`                  | Prettier on the whole repo                                           |
@@ -34,7 +35,7 @@ pnpm --filter api grpc:call  # call the gRPC server and print the result
 
 Click an item in the list and it moves to the bottom of its Fruit or Vegetable column. Five seconds later it goes back to the bottom of the list. Click an item in a column and it goes back right away. A thin bar under each column item shows the time left.
 
-The web app has a sidebar for switching between the two assignments (a row of tabs on phones, so the board keeps the full width). The Assignment 2 page is a placeholder for now.
+The web app has a sidebar for switching between the two assignments (a row of tabs on phones, so the board keeps the full width). The Assignment 2 page is a dashboard of the Part 2 API (see [Dashboard](#dashboard-in-the-web-app)).
 
 ### How it works
 
@@ -173,6 +174,28 @@ Encoding once handles 5.6x the requests of my first version, and reaches 92% of 
 - Before measuring, each strategy's response is checked against the same expected data.
 - The data is synthetic but seeded, with the same shape and the same 12 departments as dummyjson ([`bench/fixtures.ts`](apps/api/bench/fixtures.ts)).
 
+### Dashboard (in the web app)
+
+The web app's Assignment 2 page turns the API's response into a dashboard: four headline numbers, four charts, and a detail panel for one department.
+
+| Chart                                    | Question                         | What the data shows                                                        |
+| ---------------------------------------- | -------------------------------- | -------------------------------------------------------------------------- |
+| Headcount (ranked bars)                  | Which departments are biggest?   | Legal and Marketing (23 each); Business Development is the smallest (7)    |
+| Gender balance (diverging bars from 50%) | Is each department balanced?     | 51% women overall, but Business Development is 100% women and Training 30% |
+| Age range (range bars)                   | How spread out are the ages?     | Everyone is 23–46; Human Resources has the narrowest range (11 years)      |
+| Hair color (heatmap)                     | How are hair colors distributed? | Fairly evenly (Blonde 30 down to Gray and Purple 18): the source is random |
+
+The sentence under each chart title is computed from the data, so it stays true if the data changes.
+
+- **Pick a department anywhere.** Clicking a department in any chart highlights it in all four (the rest turn gray) and opens a panel with its numbers, its hair colors, and a searchable list of names and postal codes. Sorting applies to every chart at once, and a table view shows every number without needing a pointer.
+- **Data is loaded on the server, per request.** The page's static shell (title, sidebar, loading skeleton) is prerendered and the dashboard streams in at request time (`connection()`). So `next build` never needs the API, the browser never calls it (no CORS, no public API URL), and a failed request shows an error card with a retry button. The web app doesn't cache the response itself: on serverless hosts Next.js's runtime cache doesn't persist between requests, and the API already caches for a minute.
+- **Charts are plain HTML and CSS, no chart library.** The whole dashboard is about 6 KB of gzipped JavaScript and renders on the server. Bars, ranges and a heatmap don't need more, and owning the markup kept accessibility simple: each chart is one Tab stop, the arrow keys move between departments, and every row's accessible name includes its numbers.
+- **One color rule per job.** One blue for amounts; blue against orange for "more men" and "more women" (checked for color vision deficiency and contrast with a palette validator); a light-to-dark blue ramp for the heatmap. Selecting a department grays out the rest instead of adding colors.
+- **Responsive.** The headline numbers go from two columns to four. Charts stack on narrow screens; on wide screens the two bar charts sit side by side and the age chart and heatmap take the full width. Below 1024 px the nine-column heatmap scrolls inside its card, never the page.
+- **Configuration.** The dashboard reads the API from `API_URL` (default `http://localhost:4000`, see [`apps/web/.env.example`](apps/web/.env.example)). On Vercel, set it to the deployed API's URL.
+
+**Tests (23):** the stats and insight sentences (including names like `VictoriaMcDonald`), the API client's error handling, selection across charts, sorting, search, keyboard movement, the table view, and the error card.
+
 ## Other approaches (for the interview)
 
 The assignment asks for one solution and invites a discussion of others. These are the ones I considered.
@@ -188,19 +211,22 @@ The assignment asks for one solution and invites a discussion of others. These a
 
 ### Part 2
 
-| Approach                                   | Trade-off                                                                                                                                                                                                                                                                                                 |
-| ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Object.groupBy` + `filter`/`map`/`reduce` | Reads closer to the spec, but about 2x slower (measured above) and allocates intermediate arrays.                                                                                                                                                                                                         |
-| Response schema (`fast-json-stringify`)    | Documents the response and drops unknown fields. Faster for fixed-shape objects, slower for this map-shaped one.                                                                                                                                                                                          |
-| CDN caching (`Cache-Control: s-maxage=60`) | On Vercel the CDN would answer repeat requests without running the function at all. The natural next step for the deployed API.                                                                                                                                                                           |
-| Shared cache (Redis, Vercel Runtime Cache) | Each Vercel instance has its own in-memory cache, so a new instance starts cold. A shared cache fixes that at the cost of a network hop and another service.                                                                                                                                              |
-| Serve stale while refreshing               | Today the cache expires all at once: the first request after each expiry waits for dummyjson, and if dummyjson is down right then, the API returns 502 although it holds data that is only a minute old. Serving the old value while refreshing in the background (or when the refresh fails) fixes both. |
-| ConnectRPC instead of `@grpc/grpc-js`      | One service definition serves gRPC, gRPC-Web and JSON over HTTP/1.1, so browsers could call it and it could run on Vercel. Needs a code generator (Buf).                                                                                                                                                  |
-| Next.js route handler or Hono              | Could deploy next to the web app. I kept a standalone Fastify service because the assignment asks for an HTTP framework, and it keeps Part 2 independent.                                                                                                                                                 |
+| Approach                                      | Trade-off                                                                                                                                                                                                                                                                                                           |
+| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Object.groupBy` + `filter`/`map`/`reduce`    | Reads closer to the spec, but about 2x slower (measured above) and allocates intermediate arrays.                                                                                                                                                                                                                   |
+| Response schema (`fast-json-stringify`)       | Documents the response and drops unknown fields. Faster for fixed-shape objects, slower for this map-shaped one.                                                                                                                                                                                                    |
+| CDN caching (`Cache-Control: s-maxage=60`)    | On Vercel the CDN would answer repeat requests without running the function at all. The natural next step for the deployed API.                                                                                                                                                                                     |
+| Shared cache (Redis, Vercel Runtime Cache)    | Each Vercel instance has its own in-memory cache, so a new instance starts cold. A shared cache fixes that at the cost of a network hop and another service.                                                                                                                                                        |
+| Serve stale while refreshing                  | Today the cache expires all at once: the first request after each expiry waits for dummyjson, and if dummyjson is down right then, the API returns 502 although it holds data that is only a minute old. Serving the old value while refreshing in the background (or when the refresh fails) fixes both.           |
+| ConnectRPC instead of `@grpc/grpc-js`         | One service definition serves gRPC, gRPC-Web and JSON over HTTP/1.1, so browsers could call it and it could run on Vercel. Needs a code generator (Buf).                                                                                                                                                            |
+| Next.js route handler or Hono                 | Could deploy next to the web app. I kept a standalone Fastify service because the assignment asks for an HTTP framework, and it keeps Part 2 independent.                                                                                                                                                           |
+| Chart library (Recharts, visx)                | Recharts gives tooltips, animation and responsive containers for free, but its bundle is several times the size of this whole dashboard and it renders in the browser. visx keeps full control but is more code than these simple shapes need. A library pays off for time series, zooming, or thousands of points. |
+| Fetching in the browser (SWR, TanStack Query) | Easy polling and per-viewer caching, but the API would need CORS, its URL would be public, and the first paint would wait behind a spinner.                                                                                                                                                                         |
 
 ## Known limitations
 
 - **Double-click moves two items.** The second click of a double-click lands on the item that slid up into place. Ignoring clicks with `event.detail > 1` would stop that, but it would also ignore a quick series of single clicks on the top item, so I left the behavior as it is.
+- **No dark mode.** The app is light only. The chart palette has dark-mode steps ready if it is added.
 - **The cache is per instance.** On Vercel each function instance has its own in-memory cache, and a new instance starts cold. See the shared cache and CDN options above.
 
 ## Assumptions

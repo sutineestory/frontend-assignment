@@ -5,6 +5,19 @@
    countdown-bar.tsx) instead of on :root. */
 @theme inline {
   --font-sans: var(--font-geist-sans);
+
+  /* Chart colors from the dataviz reference palette. The blue/orange pair was
+     checked for color vision deficiency and contrast on white. */
+  --color-chart-blue: #2a78d6;
+  --color-chart-orange: #eb6834;
+  --color-chart-muted: #c3c2b7;
+  --color-chart-grid: #e1e0d9;
+  --color-chart-empty: #f4f4f2;
+  --color-chart-ramp-1: #b7d3f6;
+  --color-chart-ramp-2: #86b6ef;
+  --color-chart-ramp-3: #5598e7;
+  --color-chart-ramp-4: #2a78d6;
+  --color-chart-ramp-5: #1c5cab;
   --animate-countdown: countdown var(--countdown-duration) linear
     var(--countdown-delay, 0ms) forwards;
 
