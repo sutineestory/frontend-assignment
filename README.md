@@ -1,28 +1,211 @@
 # Frontend Assignment
 
-Solutions to the [7 Solutions frontend assignment](docs/README.md).
+My solutions to the [7 Solutions frontend assignment](docs/README.md).
 
-| App                    | Assignment               | Stack                                             | Live          |
-| ---------------------- | ------------------------ | ------------------------------------------------- | ------------- |
-| [`apps/web`](apps/web) | 1. Auto Delete Todo List | Next.js, React, TypeScript, Tailwind CSS, Zustand | _coming soon_ |
-| [`apps/api`](apps/api) | 2. Create data from API  | Node.js, Fastify, TypeScript (ESM)                | _coming soon_ |
+| Part                           | Code                   | Live               | Stack                                                     |
+| ------------------------------ | ---------------------- | ------------------ | --------------------------------------------------------- |
+| 1. Auto Delete Todo List       | [`apps/web`](apps/web) | _link coming soon_ | Next.js 16, React 19, TypeScript, Tailwind CSS 4, Zustand |
+| 2. Users grouped by department | [`apps/api`](apps/api) | _link coming soon_ | Node.js 24, Fastify 5, TypeScript (ESM), gRPC             |
 
-## Getting started
+Every push runs format check, lint, typecheck, tests and build in [CI](.github/workflows/ci.yml).
+
+## Quick start
 
 Requires Node.js 24 and pnpm (`corepack enable pnpm`).
 
 ```bash
 pnpm install
-pnpm dev:web   # http://localhost:3000
-pnpm dev:api   # http://localhost:3000 (run one at a time, or set PORT)
+
+pnpm dev:web                 # Part 1: http://localhost:3000
+PORT=4000 pnpm dev:api       # Part 2: http://localhost:4000/users/departments
+pnpm dev:grpc                # Part 2 over gRPC: localhost:50051
+pnpm --filter api grpc:call  # call the gRPC server and print the result
 ```
 
-## Scripts
+| Command                        | What it does                                                         |
+| ------------------------------ | -------------------------------------------------------------------- |
+| `pnpm test`                    | Vitest in both apps (46 tests)                                       |
+| `pnpm lint` / `pnpm typecheck` | ESLint / TypeScript in both apps                                     |
+| `pnpm build`                   | Production build of both apps                                        |
+| `pnpm format`                  | Prettier on the whole repo                                           |
+| `pnpm bench`                   | Part 2 benchmarks, about 3 minutes (see [Performance](#performance)) |
 
-| Command          | What it does                   |
-| ---------------- | ------------------------------ |
-| `pnpm lint`      | ESLint in every app            |
-| `pnpm typecheck` | TypeScript checks in every app |
-| `pnpm test`      | Vitest in every app            |
-| `pnpm build`     | Production build of every app  |
-| `pnpm format`    | Prettier on the whole repo     |
+## Part 1: Auto Delete Todo List
+
+Click an item in the list and it moves to the bottom of its Fruit or Vegetable column. Five seconds later it goes back to the bottom of the list. Click an item in a column and it goes back right away.
+
+### How it works
+
+Code: [`apps/web/src/features/board/`](apps/web/src/features/board)
+
+| File                 | Role                                                                   |
+| -------------------- | ---------------------------------------------------------------------- |
+| `board.ts`           | Pure state transitions: `moveToColumn` and `moveToList`                |
+| `store.ts`           | Zustand store that applies the transitions and owns one timer per item |
+| `store-provider.tsx` | Creates one store per mount and shares it through React context        |
+| `components/`        | `Board` (Server Component), `MainList`, `TypeColumn`, `ItemButton`     |
+
+### Design decisions
+
+- **Transitions do nothing when they don't apply.** `moveToColumn` on an item that isn't in the list returns the same state object. So does `moveToList` on an item that isn't in a column. That makes a manual click and a timer safe to race: whichever comes second does nothing.
+- **One timer per item, outside React state.** Timers live in a `Map` inside the store, because they are never rendered. Sending an item back by hand cancels its timer, so it can't move twice. Items that time out return in the order they were moved.
+- **Timers belong to the store, not to a component's Effects.** They start in the click handler, so React Strict Mode's double-run Effects can't create duplicates. They are also not cleared in an Effect cleanup: Next.js 16 keeps visited pages alive in `<Activity>`, which runs cleanups but keeps state, so clearing timers there would leave items stuck in a column. A test covers this.
+- **One store per mount, not a module-level singleton.** On the server a singleton would be shared between requests. This is the pattern the Zustand docs recommend for Next.js.
+- **The page is a Server Component.** The first HTML already contains the whole list; only the board's interactive parts are client components. Each component subscribes only to the slice of state it renders.
+- **Accessible basics.** Items are real `<button>`s, each column is a `<section>` with a heading, focus outlines are visible, and everything works with the keyboard. Focus handling after a move could be better (see [Known limitations](#known-limitations)).
+- **Layout.** Three columns at every screen width, so on a phone the item you just moved stays in view. Columns keep a minimum height, so the page doesn't jump as items move.
+
+### Tests (21)
+
+- **Transitions:** moving in both directions, append order, and the do-nothing cases.
+- **Store, with fake timers:** an item returns at 5000 ms but not at 4999 ms; a manual return cancels the timer; several timers run independently.
+- **UI, with React Testing Library:** clicking, auto-return, early return, the keyboard, and items still returning while the board is hidden in `<Activity>`.
+
+## Part 2: Users grouped by department
+
+Fetches all users from [dummyjson](https://dummyjson.com/users) and groups them by `company.department`.
+
+| Endpoint                                           | Response                                                       |
+| -------------------------------------------------- | -------------------------------------------------------------- |
+| `GET /users/departments`                           | The summary below                                              |
+| `GET /health`                                      | `{ "status": "ok" }`                                           |
+| gRPC `users.v1.UserService/GetDepartmentSummaries` | The same summary ([`users.proto`](apps/api/proto/users.proto)) |
+
+One department from the real response:
+
+```json
+{
+  "Business Development": {
+    "male": 0,
+    "female": 7,
+    "ageRange": "27-44",
+    "hair": { "Black": 1, "Red": 1, "Blonde": 3, "Green": 2 },
+    "addressUser": {
+      "LillianSimmons": "47571",
+      "HazelGardner": "35181",
+      "NoraMills": "51983",
+      "SophiaJones": "24752",
+      "ZoeBennett": "50908",
+      "PaisleyBell": "49147",
+      "SamanthaMartinez": "53772"
+    }
+  }
+}
+```
+
+### How it works
+
+Code: [`apps/api/src/`](apps/api/src)
+
+| File                            | Role                                                                                             |
+| ------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `users/dummyjson.ts`            | One request for all users, only the fields we use, 5 s timeout. Failures become `UpstreamError`. |
+| `users/transform.ts`            | `summarizeByDepartment`: one pass over the users                                                 |
+| `lib/cache-async.ts`            | 60 s cache that also makes concurrent callers share one in-flight request                        |
+| `users/department-summaries.ts` | Connects the three above; both servers read through it                                           |
+| `http/build-app.ts`             | Fastify app. Dependencies are passed in, so tests never touch the network.                       |
+| `grpc/`                         | gRPC server, client, and a CLI to call it                                                        |
+
+### Design decisions
+
+- **One upstream request.** dummyjson returns 30 users by default. `limit=0` returns all 208, and `select=` leaves out the fields we don't use.
+- **One pass over the data.** Gender counts, age range, hair colors and addresses all update in a single loop, and the `"min-max"` string is built once at the end. About 2x faster than `groupBy` plus array methods ([Performance](#performance)).
+- **Cache with shared in-flight requests.** Results are cached for 60 seconds. When the cache is empty, concurrent requests wait on the same upstream call instead of each making their own (100 requests, 1 call). Failures are not cached.
+- **Encode the response once per cache fill.** The cache returns the same object until it refills, so the JSON bytes (and the protobuf bytes for gRPC) are built once and reused ([`memoizeLast`](apps/api/src/lib/memoize-last.ts)). That took HTTP from about 20k to 114k requests/s on my machine, and gRPC up 1.5x. Tests check that new data is served after a refill.
+- **No response schema.** I started with a Fastify response schema, which serializes with `fast-json-stringify`, then measured it. This response is mostly dynamic keys (names, hair colors), and there it was about 2x slower than `JSON.stringify`, so I removed it.
+- **Clear errors.** Every user is checked for the fields the transform reads. If dummyjson is down, slower than 5 s, or sends data in an unexpected shape, the API answers `502 Bad Gateway` (gRPC: `UNAVAILABLE`). Anything else is a `500` (gRPC: `INTERNAL`) with a generic message; the details go to the log, not the client.
+- **gRPC runs locally only.** It needs a long-running HTTP/2 server, which Vercel Functions don't provide. The HTTP API is the deployed part.
+
+### Tests (25)
+
+- **Transform:** the requested shape, empty input, and no mutation of the input.
+- **Cache, with fake timers:** TTL expiry, shared in-flight requests, and failures not being cached.
+- **dummyjson client:** the request URL; a bad status, an unexpected body, a user with missing fields, and network errors all become `UpstreamError`.
+- **HTTP:** every route through Fastify's `inject`, including 502, a 500 that doesn't leak the error message, and fresh data after a cache refill.
+- **gRPC:** a real server and client on a random port, error codes, and decoding of zero values.
+
+### Performance
+
+Results from `pnpm bench` on an Apple M4 (10 cores), Node 24.12. Use them to compare approaches on one machine, not as a capacity estimate for the deployed API.
+
+**HTTP, warm cache** (`bench:http`: autocannon, 100 connections, median of 3 rounds)
+
+| How the response is produced                              | req/s       | p99  |
+| --------------------------------------------------------- | ----------- | ---- |
+| `GET /health`: Fastify's ceiling on this machine          | 124,000     | 1 ms |
+| Response schema (`fast-json-stringify`), my first version | 20,434      | 8 ms |
+| `JSON.stringify` on every request                         | 34,442      | 5 ms |
+| **Encode once per cache fill (shipped)**                  | **114,234** | 1 ms |
+
+Encoding once handles 5.6x the requests of my first version, and reaches 92% of an endpoint that does no work at all.
+
+**gRPC, warm cache** (`bench:grpc`: 100 calls in flight, median of 3 rounds)
+
+| How the response is produced             | calls/s    |
+| ---------------------------------------- | ---------- |
+| Encode to protobuf on every call         | 6,758      |
+| **Encode once per cache fill (shipped)** | **10,102** |
+
+**Transform** (`bench:transform`: mean time per call)
+
+| Users           | Single pass (shipped) | `groupBy` + array methods |
+| --------------- | --------------------- | ------------------------- |
+| 208 (real size) | 0.017 ms              | 0.036 ms (2.1x slower)    |
+| 10,000          | 1.24 ms               | 2.19 ms (1.8x slower)     |
+| 100,000         | 16.7 ms               | 35.9 ms (2.2x slower)     |
+
+**Serialization** (`bench:serialize`): for the benchmark's 7.1 KB response (the real one is 6.4 KB), `JSON.stringify` takes 0.011 ms and `fast-json-stringify` with the response schema takes 0.022 ms.
+
+**dummyjson** (`bench:upstream`, the only benchmark that uses the network)
+
+- `select=` cuts the response from 282 KB to 122 KB (57% smaller). The download time stayed about the same (~545 ms), because network latency dominates it.
+- 100 concurrent requests on an empty cache made **1** dummyjson call and were all answered in 362 ms.
+- One request on a warm cache: 0.25 ms (median of 20).
+
+**How the benchmarks run**
+
+- CPU benchmarks run each implementation at each size in a fresh Node process. My first version ran them all in one process, where shared JIT and GC state made single pass look 1.3x _slower_ at 10,000 users. Isolated, it is 1.8x faster.
+- Each HTTP or gRPC server runs in its own process and serves in-memory data, so the results measure the code, not the network. Strategies take turns within each round, so background noise affects all of them equally.
+- Before measuring, each strategy's response is checked against the same expected data.
+- The data is synthetic but seeded, with the same shape and the same 12 departments as dummyjson ([`bench/fixtures.ts`](apps/api/bench/fixtures.ts)).
+
+## Other approaches (for the interview)
+
+The assignment asks for one solution and invites a discussion of others. These are the ones I considered.
+
+### Part 1
+
+| Approach                               | Trade-off                                                                                                                                                                                    |
+| -------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `useReducer` + a custom hook           | No dependency. It can reuse the same pure transitions, with timers in a `useRef(new Map())`. Zustand keeps the timers out of components and lets each component subscribe to only its slice. |
+| Deadline timestamps + one ticker       | Store `expiresAt` per item and check them with one `setInterval`. Makes a live countdown easy and copes better with background-tab timer throttling, but re-renders on every tick.           |
+| Redux Toolkit + listener middleware    | Timers become side effects in middleware. Good structure for a large app, heavy for this one.                                                                                                |
+| CSS `animationend` triggers the return | Very little JavaScript, but timing then depends on rendering. Can misfire when the tab is hidden or when `prefers-reduced-motion` turns animations off.                                      |
+
+### Part 2
+
+| Approach                                   | Trade-off                                                                                                                                                                                                                                                                                                 |
+| ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Object.groupBy` + `filter`/`map`/`reduce` | Reads closer to the spec, but about 2x slower (measured above) and allocates intermediate arrays.                                                                                                                                                                                                         |
+| Response schema (`fast-json-stringify`)    | Documents the response and drops unknown fields. Faster for fixed-shape objects, slower for this map-shaped one.                                                                                                                                                                                          |
+| CDN caching (`Cache-Control: s-maxage=60`) | On Vercel the CDN would answer repeat requests without running the function at all. The natural next step for the deployed API.                                                                                                                                                                           |
+| Shared cache (Redis, Vercel Runtime Cache) | Each Vercel instance has its own in-memory cache, so a new instance starts cold. A shared cache fixes that at the cost of a network hop and another service.                                                                                                                                              |
+| Serve stale while refreshing               | Today the cache expires all at once: the first request after each expiry waits for dummyjson, and if dummyjson is down right then, the API returns 502 although it holds data that is only a minute old. Serving the old value while refreshing in the background (or when the refresh fails) fixes both. |
+| ConnectRPC instead of `@grpc/grpc-js`      | One service definition serves gRPC, gRPC-Web and JSON over HTTP/1.1, so browsers could call it and it could run on Vercel. Needs a code generator (Buf).                                                                                                                                                  |
+| Next.js route handler or Hono              | Could deploy next to the web app. I kept a standalone Fastify service because the assignment asks for an HTTP framework, and it keeps Part 2 independent.                                                                                                                                                 |
+
+## Known limitations
+
+- **Focus after a move.** Moving an item re-mounts its button in another column, so keyboard focus goes back to the page, and screen readers get no announcement. Next steps: move focus to the next item in the list, and announce moves in an `aria-live` region.
+- **Double-click moves two items.** The second click of a double-click lands on the item that slid up into place. Ignoring clicks with `event.detail > 1` would stop that, but it would also ignore a quick series of single clicks on the top item, so I left the behavior as it is.
+- **The cache is per instance.** On Vercel each function instance has its own in-memory cache, and a new instance starts cold. See the shared cache and CDN options above.
+
+## Assumptions
+
+- **Part 1:** item names are unique, so the name serves as the item's id and React key.
+- **Part 1:** "the bottom of the main list" means after everything in it at that moment, so items that time out come back in the order they were moved.
+- **Part 2:** "users" means all 208 users, not just the first page of 30.
+- **Part 2:** `addressUser` keys are `firstName + lastName` with no separator, as in the sample (`TerryMedhurst`). If two people in one department had the same full name, the later one would win. The current data has no such case (208 users, 208 entries).
+- **Part 2:** `ageRange` is always `"min-max"`, so a department with one user gives something like `"25-25"`.
+- **Part 2:** dummyjson only uses `male` and `female`. Any other value would be counted in neither.
+- **Part 2:** the source data is static, so serving a response up to 60 seconds old is fine.
